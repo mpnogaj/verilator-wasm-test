@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Verilator Lint MVP (Web Worker)</title>
+  <style>
+    body { font-family: sans-serif; line-height: 1.6; background: #f4f4f4; color: #333; padding: 20px; }
+    h1 { border-bottom: 2px solid #00599c; padding-bottom: 10px; }
+    #output-console {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+      background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px;
+      white-space: pre-wrap; word-wrap: break-word; min-height: 400px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Verilator Lint Output:</h1>
+  <pre id="output-console"></pre>
+
+  <script>
+    const outputElement = document.getElementById('output-console');
+
+    // Helper to log to our <pre> tag
+    function logToConsole(text) {
+      console.log(text); // For debugging
+      outputElement.textContent += text + "\n";
+    }
+
+    logToConsole("Main Page: Initializing...");
+
+    // This is the hardcoded Verilog file to be linted.
+    const verilogCodeString = `
+module top (
+  input  logic [7:0] i_a,
+  input  logic [7:0] i_b,
+  output logic [8:0] o_z
+);
+  // Error 1: Undeclared signal 'i_a_undclared'
+  assign o_z = i_a_undclared; 
+  // Error 2: Width mismatch (8-bit to 9-bit)
+  assign o_z = i_a;
+  // Error 3: Unused input 'i_b'
+endmodule
+`;
+
+    // 1. Create the Web Worker
+    logToConsole("Main Page: Starting lint_worker.js...");
+    const worker = new Worker('lint_worker.js');
+
+    // 2. Set up the message listener
+    // This is how we receive messages *from* the worker.
+    worker.onmessage = (e) => {
+      const data = e.data;
+
+      switch (data.type) {
+        case 'log':
+          // This is a log/lint line from the worker's print/printErr
+          logToConsole(data.text);
+          break;
+        case 'ready':
+          // The worker's WASM is loaded and ready.
+          // Now we can send it the code to lint.
+          logToConsole("Main Page: Worker is ready. Sending Verilog code...");
+          worker.postMessage({ code: verilogCodeString });
+          break;
+        case 'done':
+          // The linting job is finished.
+          logToConsole("Main Page: Worker has signaled completion.");
+          break;
+      }
+    };
+
+    // 3. Listen for any errors from the worker itself
+    worker.onerror = (e) => {
+      logToConsole(`Main Page: CRITICAL ERROR in worker: ${e.message} (File: ${e.filename}, Line: ${e.lineno})`);
+    };
+
+  </script>
+
+</body>
+</html>
