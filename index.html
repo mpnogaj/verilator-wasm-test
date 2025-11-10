@@ -1,90 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-	<meta charset="UTF-8">
-	<title>Verilator Lint MVP (Web Worker)</title>
-	<style>
-		body {
-			font-family: sans-serif;
-			line-height: 1.6;
-			background: #f4f4f4;
-			color: #333;
-			padding: 20px;
-		}
-
-		h1 {
-			border-bottom: 2px solid #00599c;
-			padding-bottom: 10px;
-		}
-
-		#output-console {
-			font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
-			background: #1e1e1e;
-			color: #d4d4d4;
-			padding: 20px;
-			border-radius: 8px;
-			white-space: pre-wrap;
-			word-wrap: break-word;
-			min-height: 400px;
-		}
-	</style>
+<meta charset="UTF-8">
+<title>Verilator Lint MVP (Web Worker)</title>
+<style>
+body { font-family: sans-serif; background: #f4f4f4; padding: 20px; }
+#output-console {
+  background: #1e1e1e; color: #d4d4d4; padding: 10px; border-radius: 8px;
+  font-family: monospace; min-height: 200px; white-space: pre-wrap;
+}
+.file { background: #fff; border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+.file input { width: 100%; margin-bottom: 5px; }
+.file textarea { width: 100%; height: 100px; font-family: monospace; }
+</style>
 </head>
-
 <body>
+<h1>Verilator Lint Output</h1>
+<div id="files"></div>
+<button id="add-file">Add File</button>
+<button id="lint-button">Run Lint</button>
+<button id="clear-button">Clear logs</button>
+<pre id="output-console"></pre>
 
-	<h1>Verilator Lint Output:</h1>
-	<pre id="output-console"></pre>
+<script>
+const output = document.getElementById('output-console');
+const filesDiv = document.getElementById('files');
+const worker = new Worker('lint_worker.js');
 
-	<button id="lint-button">Start Linting</button>
+function log(msg){ output.textContent += msg + "\n"; }
+function clearLog(){ output.textContent = ""; }
 
-	<script>
-		const outputElement = document.getElementById('output-console');
+function addFile(name="new.v", content=""){
+  const div = document.createElement('div');
+  div.className = 'file';
+  div.innerHTML = `
+    <button class="remove">Remove file</button>
+    <input type="text" class="filename" value="${name}">
+    <textarea class="filecontent">${content}</textarea>
+  `;
+  div.querySelector('.remove').onclick = () => div.remove();
+  filesDiv.appendChild(div);
+}
 
-		function logToUI(text) {
-			outputElement.textContent += text + "\n";
-		}
+document.getElementById('add-file').onclick = () => addFile();
 
-		logToUI("Main Page: Initializing...");
+document.getElementById('lint-button').onclick = () => {
+  const verilogFiles = {};
+  document.querySelectorAll('.file').forEach(f=>{
+    const name = f.querySelector('.filename').value.trim();
+    const content = f.querySelector('.filecontent').value;
+    if (name) verilogFiles[name] = content;
+  });
+  log("Main: Sending files to worker...");
 
-		logToUI("Main Page: Starting lint_worker.js...");
-		const worker = new Worker('lint_worker.js');
+  worker.postMessage({type:'lint', files: verilogFiles});
+};
 
-		worker.onmessage = (e) => {
-			const data = e.data;
+document.getElementById('clear-button').onclick = () => clearLog();
 
-			switch (data.type) {
-				case 'log':
-					logToUI(data.text);
-					break;
-				case 'done':
-					logToUI("Main Page: Worker has signaled completion.");
-					break;
-			}
-		};
+worker.onmessage = e=>{
+  if(e.data.type==='log') log(e.data.text);
+  if(e.data.type==='done') log("Main: Worker done.");
+};
+worker.onerror = e=>{
+  log(`Worker error: ${e.message} (${e.filename}:${e.lineno})`);
+};
 
-		worker.onerror = (e) => {
-			logToUI(`Main Page: CRITICAL ERROR in worker: ${e.message} (File: ${e.filename}, Line: ${e.lineno})`);
-		};
-
-		document.getElementById('lint-button').onclick = () => {
-			logToUI("Main Page: Sending lint request to worker...");
-
-			const verilogFiles = {
-			 "top.v": `
-module top(input logic a, output logic b);
-	assign b = a;
+addFile("top.v", `module top(input logic a, output logic b);
+    assign b=a;
 endmodule
-`,
-			 "unused.v": `
-module unused(input logic x);
-	top u_top(.a(x), .b(_));
-endmodule`
-			};
-			worker.postMessage({ type: 'lint', files: verilogFiles });
-		}
-	</script>
-
+`);
+</script>
 </body>
-
 </html>

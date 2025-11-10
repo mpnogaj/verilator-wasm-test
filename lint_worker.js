@@ -90,11 +90,15 @@ function lintVerilogCode(files) {
 	const args = ['--lint-only', '--Wall', '-Wno-DECLFILENAME', '-Wno-UNOPT', '-Wno-UNOPTFLAT'].concat(filenames);
 	const mainFn = verilator_mod.callMain || verilator_mod.run;
 	mainFn(args); // execution is synchronous
+	console.log(stderr_capture);
 	if (stderr_capture.length > 1) {
 		stderr_capture.pop();
 		for (let line of stderr_capture) {
 			logToMain(line);
 		}
+	} else {
+		console.log('ok');
+		logToMain("Worker: No linting issues found.");
 	}
 }
 
